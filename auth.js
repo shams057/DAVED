@@ -87,7 +87,8 @@ async function getUserStats(userId) {
  * @returns {string|null}  the new session id (for later updates)
  */
 async function saveTaskSession(userId, feeling, taskPrompt, energyScore, tasks) {
-    const totalPoints = tasks.reduce((sum, t) => sum + (t.points || 0), 0);
+    // total_points is 0 on creation — points only accumulate as steps are ticked.
+    // This prevents the DB INSERT trigger from adding uncompleted step points to user_stats.
     const payload = tasks.map(t => ({ ...t, completed: false }));
 
     const { data, error } = await db
@@ -98,7 +99,7 @@ async function saveTaskSession(userId, feeling, taskPrompt, energyScore, tasks) 
             task_prompt: taskPrompt,
             energy_score: energyScore,
             tasks: payload,
-            total_points: totalPoints,
+            total_points: 0,
             completed_steps: 0,
             completed_points: 0
         })

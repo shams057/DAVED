@@ -1,21 +1,21 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM ELEMENTS ---
-    const promptWrapper    = document.getElementById('prompt-wrapper');
-    const tiltBox          = document.getElementById('tilt-box');
-    const feelingBox       = document.getElementById('feeling-box');
-    const feelingInput     = document.getElementById('feeling-input');
-    const taskInput        = document.getElementById('task-input');
-    const sendBtn          = document.getElementById('send-btn');
+    const promptWrapper = document.getElementById('prompt-wrapper');
+    const tiltBox = document.getElementById('tilt-box');
+    const feelingBox = document.getElementById('feeling-box');
+    const feelingInput = document.getElementById('feeling-input');
+    const taskInput = document.getElementById('task-input');
+    const sendBtn = document.getElementById('send-btn');
     const resultsContainer = document.getElementById('results');
-    const taskList         = document.getElementById('task-list');
-    const energyBadge      = document.getElementById('energy-badge');
-    const pointsTotal      = document.getElementById('points-total');
-    const addTaskBtn       = document.getElementById('add-task-btn');
-    const backBtn          = document.getElementById('back-btn');
+    const taskList = document.getElementById('task-list');
+    const energyBadge = document.getElementById('energy-badge');
+    const pointsTotal = document.getElementById('points-total');
+    const addTaskBtn = document.getElementById('add-task-btn');
+    const backBtn = document.getElementById('back-btn');
 
     let totalPoints = 0;
     // Track current session for progress saving
-    let currentSessionId  = null;
+    let currentSessionId = null;
     let currentTasksState = [];
 
     // --- PARALLAX EFFECT on feeling box ---
@@ -139,9 +139,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- ENERGY SCORE RENDERING ---
     function renderEnergyBadge(score) {
         let cls, label;
-        if (score < 30)       { cls = 'energy-low';    label = 'Low Energy'; }
-        else if (score < 60)  { cls = 'energy-medium'; label = 'Medium Energy'; }
-        else                   { cls = 'energy-high';   label = 'High Energy'; }
+        if (score < 30) { cls = 'energy-low'; label = 'Low Energy'; }
+        else if (score < 60) { cls = 'energy-medium'; label = 'Medium Energy'; }
+        else { cls = 'energy-high'; label = 'High Energy'; }
         energyBadge.className = `energy-badge ${cls}`;
         energyBadge.innerHTML = `${label} <span style="opacity:0.5;font-weight:400;margin-left:4px;">(${score}/100)</span>`;
     }
@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const li = document.createElement('li');
         li.className = 'task-item' + (task.isMVE ? ' mve' : '');
         li.dataset.points = task.points || 0;
-        li.dataset.index  = index;
+        li.dataset.index = index;
 
         li.innerHTML = `
             <input type="checkbox" class="task-check" aria-label="Mark task done" ${task.completed ? 'checked' : ''}>
@@ -225,28 +225,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- SCORE A SINGLE TASK VIA AI ---
     async function scoreTaskWithAI(stepText) {
-        const systemPrompt = `You are a task difficulty evaluator. Given a task step, return ONLY a raw JSON object with a single "points" field (integer). Use this scale:
-- Easy / quick (under 5 min): 5–10 pts
-- Medium effort (5–15 min): 15–25 pts
-- Hard / draining (15+ min or cognitively heavy): 30–50 pts
-Return ONLY: {"points": number}`;
-
         try {
-            const response = await fetch("https://api.anthropic.com/v1/messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514",
-                    max_tokens: 1000,
-                    system: systemPrompt,
-                    messages: [{ role: "user", content: stepText }]
-                })
+            const response = await fetch('/api/score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: stepText })
             });
             const data = await response.json();
-            const text = data.content.map(i => i.text || '').join('');
-            const clean = text.replace(/```json|```/g, '').trim();
-            const parsed = JSON.parse(clean);
-            return parsed.points || 10;
+            return data?.points || 10;
         } catch (e) {
             console.error('AI scoring failed:', e);
             return 10;
@@ -266,9 +252,9 @@ Return ONLY: {"points": number}`;
         `;
         taskList.appendChild(form);
 
-        const input      = form.querySelector('input');
+        const input = form.querySelector('input');
         const confirmBtn = form.querySelector('.confirm-btn');
-        const cancelBtn  = form.querySelector('.cancel-btn');
+        const cancelBtn = form.querySelector('.cancel-btn');
         input.focus();
 
         async function submitNew() {
@@ -279,7 +265,7 @@ Return ONLY: {"points": number}`;
             confirmBtn.disabled = true;
             input.disabled = true;
 
-            const points  = await scoreTaskWithAI(text);
+            const points = await scoreTaskWithAI(text);
             const newTask = { step: text, isMVE: false, points, completed: false };
 
             // Add to in-memory state
@@ -321,7 +307,7 @@ Return ONLY: {"points": number}`;
             autoExpand(feelingInput);
             autoExpand(taskInput);
             // Reset session tracking
-            currentSessionId  = null;
+            currentSessionId = null;
             currentTasksState = [];
             setTimeout(() => promptWrapper.classList.remove('show-animated'), 500);
         }, 400);
@@ -330,7 +316,7 @@ Return ONLY: {"points": number}`;
     // --- SEND ---
     sendBtn.addEventListener('click', async () => {
         const feeling = feelingInput.value.trim();
-        const task    = taskInput.value.trim();
+        const task = taskInput.value.trim();
 
         if (!task) {
             taskInput.focus();
