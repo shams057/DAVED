@@ -123,88 +123,152 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ── VOICE TRANSCRIPTION ──
-    const micBtn = document.getElementById('mic-btn');
+// ── HYBRID VOICE TRANSCRIPTION (NATIVE + LOCAL WHISPER) ──
+const micBtn = document.getElementById('mic-btn');
+let activeVoiceTarget = taskInput;
+[feelingInput, taskInput].forEach(el => {
+    el.addEventListener('focus', () => { activeVoiceTarget = el; });
+});
 
-    // Track which input was last focused so voice goes to the right field
-    let activeVoiceTarget = taskInput;
-    [feelingInput, taskInput].forEach(el => {
-        el.addEventListener('focus', () => { activeVoiceTarget = el; });
-    });
+// 1. Detect native support
+const NativeSpeech = window.SpeechRecognition || window.webkitSpeechRecognition;
+let useNativeEngine = !!NativeSpeech; // Evaluates to true if the object exists
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-        // Browser doesn't support it — hide the button gracefully
-        if (micBtn) micBtn.style.display = 'none';
-    } else {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;      // single utterance per press
-        recognition.interimResults = true;   // show live preview while speaking
-        recognition.lang = 'en-US';
-
-        let isRecording = false;
-        let interimStart = 0; // position where the interim text begins in the textarea
-
-        function setRecordingState(active) {
-            isRecording = active;
-            micBtn.classList.toggle('mic-recording', active);
-            micBtn.title = active ? 'Stop recording' : 'Voice input';
-            micBtn.innerHTML = active
-                ? '<i class="fas fa-stop"></i>'
-                : '<i class="fas fa-microphone"></i>';
+// 2. BRAVE BYPASS: Force Brave to use Local AI because its native API is broken
+if (navigator.brave && navigator.brave.isBrave) {
+    navigator.brave.isBrave().then(isBrave => {
+        if (isBrave) {
+            console.log("Brave browser detected. Forcing local AI.");
+            useNativeEngine = false; 
         }
+    });
+}
 
-        micBtn.addEventListener('click', () => {
-            if (isRecording) {
-                recognition.stop();
-            } else {
-                // Focus the active target so appended text is visible
-                activeVoiceTarget.focus();
-                // Mark where interim text will start (after existing content + space)
-                const existing = activeVoiceTarget.value;
-                interimStart = existing.length > 0 ? existing.length + 1 : 0;
-                try {
-                    recognition.start();
-                } catch (e) {
-                    // Already started — ignore
-                }
-            }
-        });
+let transcriber = null; // For local Whisper
+let isRecording = false;
+let mediaRecorder = null; // For local recording
+let audioChunks = [];
 
-        recognition.addEventListener('start', () => setRecordingState(true));
-
-        recognition.addEventListener('result', (e) => {
-            const target = activeVoiceTarget;
-            let interim = '';
-            let final = '';
-
-            for (const result of e.results) {
-                if (result.isFinal) final += result[0].transcript;
-                else interim += result[0].transcript;
-            }
-
-            // Rebuild value: text before recording started + latest transcript
-            const base = target.value.slice(0, interimStart).trimEnd();
-            const transcript = final || interim;
-            target.value = base + (base.length > 0 ? ' ' : '') + transcript;
-            autoExpand(target);
-        });
-
-        recognition.addEventListener('end', () => {
-            setRecordingState(false);
-            // Clean up trailing whitespace
-            activeVoiceTarget.value = activeVoiceTarget.value.trim();
-            autoExpand(activeVoiceTarget);
-        });
-
-        recognition.addEventListener('error', (e) => {
-            setRecordingState(false);
-            if (e.error === 'not-allowed') {
-                // Show a subtle inline hint instead of an alert
-                showInputError('Microphone access was denied. Please allow it in your browser settings.');
-            }
-        });
+// Helper: UI State
+function setRecordingState(active, label = '') {
+    isRecording = active;
+    micBtn.classList.toggle('mic-recording', active);
+    if (active) {
+        micBtn.innerHTML = '<i class="fas fa-stop"></i>';
+        if (label) micBtn.title = label;
+    } else {
+        micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+        micBtn.title = "Voice input";
     }
+}
+
+// ── OPTION A: NATIVE (Chrome/Safari/Edge) ──
+function runNativeSpeech() {
+    const recognition = new NativeSpeech();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    let interimStart = activeVoiceTarget.value.length > 0 ? activeVoiceTarget.value.length + 1 : 0;
+
+    recognition.onstart = () => setRecordingState(true);
+    recognition.onresult = (e) => {
+        let transcript = Array.from(e.results).map(r => r[0].transcript).join('');
+        const base = activeVoiceTarget.value.slice(0, interimStart).trimEnd();
+        activeVoiceTarget.value = base + (base.length > 0 ? ' ' : '') + transcript;
+        autoExpand(activeVoiceTarget);
+    };
+    recognition.onend = () => {
+        setRecordingState(false);
+        activeVoiceTarget.value = activeVoiceTarget.value.trim();
+    };
+    recognition.onerror = (e) => {
+        setRecordingState(false);
+        if (e.error === 'not-allowed') {
+            showInputError("Mic access denied.");
+        } else if (e.error === 'network') {
+            // Failsafe: if another Chromium browser blocks the network
+            showInputError("Network error. The native voice API might be blocked.");
+        }
+    };
+    recognition.start();
+}
+
+// ── OPTION B: LOCAL AI (Firefox/Brave) ──
+async function runLocalAI() {
+    try {
+        // Initialize Model with Download Hint
+        if (!transcriber) {
+            const originalTitle = micBtn.title;
+            micBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            showInputError("Downloading AI model (first time only)... please wait.");
+            
+            // 👉 ADD THIS LINE RIGHT HERE:
+            window.Transformers.env.allowLocal = false; 
+            
+            transcriber = await window.Transformers.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+            
+            // Clear the hint once loaded
+            let hint = document.getElementById('input-validation-msg');
+            if (hint) hint.style.display = 'none';
+        }
+        
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+        mediaRecorder.onstop = async () => {
+            micBtn.innerHTML = '<i class="fas fa-magic fa-spin"></i>'; // Thinking icon
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            
+            // Convert to 16kHz Float32 for Whisper
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+            const audioData = decoded.getChannelData(0);
+
+            const output = await transcriber(audioData);
+            
+            const space = activeVoiceTarget.value.length > 0 ? ' ' : '';
+            activeVoiceTarget.value = activeVoiceTarget.value.trim() + space + output.text.trim();
+            autoExpand(activeVoiceTarget);
+            
+            stream.getTracks().forEach(t => t.stop());
+            setRecordingState(false);
+        };
+
+        mediaRecorder.start();
+        setRecordingState(true, "Recording locally...");
+    } catch (err) {
+        setRecordingState(false);
+        showInputError("Local AI failed: " + err.message);
+    }
+}
+
+// ── MAIN BUTTON LOGIC ──
+micBtn.addEventListener('click', () => {
+    if (isRecording) {
+        if (useNativeEngine) {
+            // Native engine automatically stops on its own usually, 
+            // but you can call recognition.stop() if you keep a global reference.
+        } else if (mediaRecorder) {
+            mediaRecorder.stop();
+        }
+        return;
+    }
+
+    activeVoiceTarget.focus();
+
+    if (useNativeEngine) {
+        console.log("Using Native Browser Engine");
+        runNativeSpeech();
+    } else {
+        console.log("Using Local Transformers.js Engine");
+        runLocalAI();
+    }
+});
 
     // ── NAVBAR ──
     const navButtons = document.querySelectorAll('.nav-buttons .icon-btn');
