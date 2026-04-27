@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Load today's pts once user is known ──
     async function initDayPoints() {
-        await window.davedAuthReady;
         if (window.davedUser) {
             CurrDayPts = await getTodayPoints(window.davedUser.id);
         }
@@ -122,6 +121,90 @@ document.addEventListener('DOMContentLoaded', () => {
     [feelingInput, taskInput].forEach(el => {
         el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); } });
     });
+
+    // ── VOICE TRANSCRIPTION ──
+    const micBtn = document.getElementById('mic-btn');
+
+    // Track which input was last focused so voice goes to the right field
+    let activeVoiceTarget = taskInput;
+    [feelingInput, taskInput].forEach(el => {
+        el.addEventListener('focus', () => { activeVoiceTarget = el; });
+    });
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+        // Browser doesn't support it — hide the button gracefully
+        if (micBtn) micBtn.style.display = 'none';
+    } else {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;      // single utterance per press
+        recognition.interimResults = true;   // show live preview while speaking
+        recognition.lang = 'en-US';
+
+        let isRecording = false;
+        let interimStart = 0; // position where the interim text begins in the textarea
+
+        function setRecordingState(active) {
+            isRecording = active;
+            micBtn.classList.toggle('mic-recording', active);
+            micBtn.title = active ? 'Stop recording' : 'Voice input';
+            micBtn.innerHTML = active
+                ? '<i class="fas fa-stop"></i>'
+                : '<i class="fas fa-microphone"></i>';
+        }
+
+        micBtn.addEventListener('click', () => {
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                // Focus the active target so appended text is visible
+                activeVoiceTarget.focus();
+                // Mark where interim text will start (after existing content + space)
+                const existing = activeVoiceTarget.value;
+                interimStart = existing.length > 0 ? existing.length + 1 : 0;
+                try {
+                    recognition.start();
+                } catch (e) {
+                    // Already started — ignore
+                }
+            }
+        });
+
+        recognition.addEventListener('start', () => setRecordingState(true));
+
+        recognition.addEventListener('result', (e) => {
+            const target = activeVoiceTarget;
+            let interim = '';
+            let final = '';
+
+            for (const result of e.results) {
+                if (result.isFinal) final += result[0].transcript;
+                else interim += result[0].transcript;
+            }
+
+            // Rebuild value: text before recording started + latest transcript
+            const base = target.value.slice(0, interimStart).trimEnd();
+            const transcript = final || interim;
+            target.value = base + (base.length > 0 ? ' ' : '') + transcript;
+            autoExpand(target);
+        });
+
+        recognition.addEventListener('end', () => {
+            setRecordingState(false);
+            // Clean up trailing whitespace
+            activeVoiceTarget.value = activeVoiceTarget.value.trim();
+            autoExpand(activeVoiceTarget);
+        });
+
+        recognition.addEventListener('error', (e) => {
+            setRecordingState(false);
+            if (e.error === 'not-allowed') {
+                // Show a subtle inline hint instead of an alert
+                showInputError('Microphone access was denied. Please allow it in your browser settings.');
+            }
+        });
+    }
 
     // ── NAVBAR ──
     const navButtons = document.querySelectorAll('.nav-buttons .icon-btn');
@@ -464,7 +547,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Streak badge ──
     async function loadStreakBadge() {
-        await window.davedAuthReady;
         const badge     = document.getElementById('streak-count');
         const streakBtn = document.getElementById('streak-btn');
         if (!badge) return;

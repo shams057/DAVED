@@ -248,11 +248,14 @@
     color: #ccc;
     font-size: 12px;
     padding: 4px;
-    transition: transform 0.25s ease;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease;
     flex-shrink: 0;
     margin-top: 4px;
 }
-.session-card.expanded .session-expand-icon { transform: rotate(180deg); }
+.session-card.expanded .session-expand-icon {
+    transform: rotate(180deg);
+    color: #0066ff;
+}
 
 .session-delete {
     position: absolute;
@@ -271,13 +274,39 @@
 .session-header:hover .session-delete { opacity: 1; }
 .session-delete:hover { background: rgba(239,68,68,0.1); color: #ef4444; }
 
-/* Step list */
+/* Step list — animated expand */
 .session-steps {
-    display: none;
-    padding: 0 20px 12px;
-    border-top: 1px solid rgba(0,0,0,0.05);
+    display: block;              /* always in flow so height is measurable   */
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    padding: 0 20px;
+    border-top: 1px solid transparent;
+    transition:
+        max-height 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity    0.28s ease,
+        padding    0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.28s ease;
 }
-.session-card.expanded .session-steps { display: block; }
+.session-card.expanded .session-steps {
+    max-height: 1200px;           /* generous ceiling; transition speed is what matters */
+    opacity: 1;
+    padding: 0 20px 12px;
+    border-top-color: rgba(0,0,0,0.05);
+}
+
+/* Individual step items — stagger in when card expands */
+.step-item {
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.session-card.expanded .step-item {
+    opacity: 1;
+    transform: translateY(0);
+}
+/* stagger each step by its DOM index (set in JS via CSS var) */
+.session-card.expanded .step-item { transition-delay: calc(var(--step-i, 0) * 40ms + 80ms); }
 
 .step-item {
     display: flex;

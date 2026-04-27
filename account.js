@@ -339,7 +339,7 @@ function buildSessionCard(session) {
     function renderSteps() {
         const inner = card.querySelector(`#steps-${session.id} .steps-inner`);
         inner.innerHTML = tasks.map((t, idx) => `
-            <div class="step-item" data-idx="${idx}">
+            <div class="step-item" data-idx="${idx}" style="--step-i:${idx}">
                 <label class="step-checkbox-label">
                     <input type="checkbox" class="step-checkbox" data-idx="${idx}" ${t.completed ? 'checked' : ''}>
                     <span class="step-dot-custom ${t.completed ? 'done-dot' : ''} ${t.isMVE && !t.completed ? 'mve-dot' : ''}"></span>
