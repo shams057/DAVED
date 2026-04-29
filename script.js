@@ -99,7 +99,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ── AUTO-EXPAND ──
-    function autoExpand(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+    const MAX_TASK_HEIGHT = 180; // px — cap for the main task textarea
+    function autoExpand(el) {
+        el.style.height = '0px';
+        const scrollH = el.scrollHeight;
+        const maxH = el === taskInput ? MAX_TASK_HEIGHT : 200;
+        const newH = Math.min(scrollH, maxH);
+        el.style.height = newH + 'px';
+        el.style.overflowY = scrollH > maxH ? 'auto' : 'hidden';
+    }
     feelingInput.addEventListener('input', () => {
         autoExpand(feelingInput);
         tiltBox.style.transition = 'transform 0.3s cubic-bezier(0.23, 1, 0.32, 1)';

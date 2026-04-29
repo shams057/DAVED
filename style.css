@@ -141,7 +141,8 @@ body {
 }
 .prompt-top { margin-bottom: 2px; }
 .prompt-box textarea {
-    flex: 1;
+    flex: none;
+    width: 100%;
     background: transparent;
     border: none; outline: none;
     font-size: 18px;
@@ -149,10 +150,14 @@ body {
     color: var(--text-color);
     resize: none;
     overflow-y: hidden;
-    max-height: 250px;
     line-height: 1.4;
     padding: 6px 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.15) transparent;
 }
+.prompt-box textarea::-webkit-scrollbar { width: 4px; }
+.prompt-box textarea::-webkit-scrollbar-track { background: transparent; }
+.prompt-box textarea::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
 .prompt-box textarea::placeholder,
 .mini-prompt textarea::placeholder { color: #bbb; }
 
